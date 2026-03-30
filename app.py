@@ -3,10 +3,10 @@ import sqlite3, hashlib, os, json, re, requests
 from functools import wraps
 
 app = Flask(__name__)
-app.secret_key = "skillgap_secret_2024"
+app.secret_key = os.getenv("SECRET_KEY")
 
 DB_PATH = "data/skillgap.db"
-GROQ_API_KEY = ""
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
 
 # ── Skill alias map ───────────────────────────────────────────────────────────
@@ -455,4 +455,4 @@ def fromjson_filter(s):
 if __name__ == "__main__":
     os.makedirs("data", exist_ok=True)
     init_db()
-    app.run(debug=True, port=5000)
+    app.run(host="0.0.0.0", port=int(os.getenv("PORT", 10000)))
