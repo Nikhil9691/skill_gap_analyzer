@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{% block title %}SkillMap{% endblock %}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,300&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #0a0a0f;
+  --surface: #111118;
+  --surface2: #1a1a24;
+  --border: #2a2a38;
+  --accent: #6c63ff;
+  --accent2: #ff6584;
+  --accent3: #43e97b;
+  --text: #e8e8f0;
+  --muted: #6b6b80;
+  --danger: #ff4757;
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+body {
+  font-family: 'DM Sans', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  line-height: 1.6;
+}
+/* Noise texture overlay */
+body::before {
+  content:'';
+  position:fixed; inset:0; pointer-events:none; z-index:0;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E");
+  opacity: 0.4;
+}
+
+/* NAV */
+nav {
+  position: sticky; top:0; z-index: 100;
+  background: rgba(10,10,15,0.85);
+  backdrop-filter: blur(20px);
+  border-bottom: 1px solid var(--border);
+  padding: 0 2rem;
+  display: flex; align-items:center; justify-content:space-between;
+  height: 64px;
+}
+.nav-brand {
+  font-family: 'Syne', sans-serif;
+  font-weight: 800;
+  font-size: 1.3rem;
+  color: var(--text);
+  text-decoration: none;
+  display: flex; align-items:center; gap: 0.5rem;
+}
+.nav-brand span { color: var(--accent); }
+.nav-links { display:flex; gap: 0.5rem; align-items:center; }
+.nav-links a {
+  color: var(--muted);
+  text-decoration: none;
+  padding: 0.4rem 0.8rem;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  font-weight: 500;
+  transition: all 0.2s;
+}
+.nav-links a:hover { color: var(--text); background: var(--surface2); }
+.nav-links a.active { color: var(--accent); }
+.btn-nav {
+  background: var(--accent);
+  color: #fff !important;
+  padding: 0.4rem 1rem !important;
+}
+.btn-nav:hover { background: #5a52e0 !important; color:#fff !important; }
+
+/* LAYOUT */
+.container { max-width: 1100px; margin: 0 auto; padding: 2rem; position:relative; z-index:1; }
+
+/* CARDS */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 1.5rem;
+}
+.card-title {
+  font-family: 'Syne', sans-serif;
+  font-weight: 700;
+  font-size: 1.1rem;
+  margin-bottom: 1rem;
+}
+
+/* BUTTONS */
+.btn {
+  display: inline-flex; align-items:center; gap:0.4rem;
+  padding: 0.6rem 1.2rem;
+  border-radius: 10px;
+  font-family: 'DM Sans', sans-serif;
+  font-weight: 500;
+  font-size: 0.9rem;
+  cursor: pointer;
+  border: none;
+  transition: all 0.2s;
+  text-decoration: none;
+}
+.btn-primary { background: var(--accent); color:#fff; }
+.btn-primary:hover { background: #5a52e0; transform: translateY(-1px); box-shadow: 0 4px 20px rgba(108,99,255,0.4); }
+.btn-secondary { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
+.btn-secondary:hover { border-color: var(--accent); color: var(--accent); }
+.btn-danger { background: var(--danger); color:#fff; }
+.btn-lg { padding: 0.8rem 1.8rem; font-size: 1rem; border-radius: 12px; }
+
+/* FORMS */
+.form-group { margin-bottom: 1.2rem; }
+.form-label { display:block; font-size:0.85rem; font-weight:500; color:var(--muted); margin-bottom:0.4rem; letter-spacing:0.05em; text-transform:uppercase; }
+.form-control {
+  width:100%;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0.7rem 1rem;
+  color: var(--text);
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.95rem;
+  transition: border-color 0.2s;
+}
+.form-control:focus { outline:none; border-color: var(--accent); }
+.form-control::placeholder { color: var(--muted); }
+select.form-control option { background: var(--surface2); }
+
+/* BADGE */
+.badge {
+  display: inline-flex; align-items:center;
+  padding: 0.25rem 0.7rem;
+  border-radius: 100px;
+  font-size: 0.78rem;
+  font-weight: 500;
+}
+.badge-matched { background: rgba(67,233,123,0.15); color: var(--accent3); border: 1px solid rgba(67,233,123,0.3); }
+.badge-missing { background: rgba(255,101,132,0.15); color: var(--accent2); border: 1px solid rgba(255,101,132,0.3); }
+.badge-high { background: rgba(255,71,87,0.15); color: #ff4757; border: 1px solid rgba(255,71,87,0.3); }
+.badge-medium { background: rgba(255,165,0,0.15); color: #ffa500; border: 1px solid rgba(255,165,0,0.3); }
+.badge-low { background: rgba(67,233,123,0.15); color: var(--accent3); border: 1px solid rgba(67,233,123,0.3); }
+
+/* ALERT */
+.alert { padding: 0.8rem 1rem; border-radius: 10px; margin-bottom: 1rem; font-size:0.9rem; }
+.alert-error { background: rgba(255,71,87,0.15); border: 1px solid rgba(255,71,87,0.3); color: #ff4757; }
+
+/* PROGRESS BAR */
+.progress-ring-wrap { position:relative; display:inline-flex; align-items:center; justify-content:center; }
+.progress-label { position:absolute; text-align:center; }
+.progress-label .pct { font-family:'Syne',sans-serif; font-weight:800; font-size:2rem; }
+.progress-label .sub { font-size:0.7rem; color:var(--muted); }
+
+/* SKILL PILLS */
+.skill-pills { display:flex; flex-wrap:wrap; gap:0.4rem; }
+.skill-pill {
+  padding: 0.3rem 0.8rem;
+  border-radius: 100px;
+  font-size: 0.82rem;
+  font-weight: 500;
+}
+
+/* TABLE */
+table { width:100%; border-collapse:collapse; }
+th { text-align:left; padding: 0.6rem 1rem; font-size:0.8rem; text-transform:uppercase; letter-spacing:0.05em; color:var(--muted); border-bottom: 1px solid var(--border); }
+td { padding: 0.8rem 1rem; border-bottom: 1px solid var(--border); font-size:0.9rem; }
+tr:last-child td { border-bottom:none; }
+tr:hover td { background: var(--surface2); }
+
+/* ANIMATIONS */
+@keyframes fadeUp { from { opacity:0; transform:translateY(16px); } to { opacity:1; transform:translateY(0); } }
+.fade-up { animation: fadeUp 0.5s ease forwards; }
+
+/* SPINNER */
+.spinner { width:24px; height:24px; border:3px solid var(--border); border-top-color:var(--accent); border-radius:50%; animation: spin 0.7s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+</style>
+{% block head %}{% endblock %}
+</head>
+<body>
+{% if session.user_id %}
+<nav>
+  <a href="{{ url_for('dashboard') }}" class="nav-brand">Skill<span>Map</span></a>
+  <div class="nav-links">
+    <a href="{{ url_for('dashboard') }}" {% if request.endpoint=='dashboard' %}class="active"{% endif %}>Analyze</a>
+    <a href="{{ url_for('history') }}" {% if request.endpoint in ['history','view_analysis'] %}class="active"{% endif %}>History</a>
+    {% if session.role == 'admin' %}
+    <a href="{{ url_for('admin') }}" {% if request.endpoint=='admin' %}class="active"{% endif %}>Admin</a>
+    {% endif %}
+    <a href="{{ url_for('logout') }}" class="btn-nav btn">Logout</a>
+  </div>
+</nav>
+{% endif %}
+{% block content %}{% endblock %}
+</body>
+</html>

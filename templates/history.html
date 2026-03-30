@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}SkillMap — History{% endblock %}
+{% block content %}
+<div class="container">
+  <div class="page-hero fade-up" style="padding:3rem 0 2rem;">
+    <h1 style="font-family:'Syne',sans-serif; font-weight:800; font-size:2rem; margin-bottom:0.4rem;">Analysis History</h1>
+    <p style="color:var(--muted);">Track your skill progress over time</p>
+  </div>
+
+  {% if analyses %}
+  <div class="card">
+    <table>
+      <thead>
+        <tr>
+          <th>Role</th>
+          <th>Match</th>
+          <th>Matched Skills</th>
+          <th>Missing Skills</th>
+          <th>Date</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for a in analyses %}
+        <tr>
+          <td style="font-weight:500;">{{ a.role_title }}</td>
+          <td>
+            <span style="font-family:'Syne',sans-serif; font-weight:700;
+              color:{{ 'var(--accent3)' if a.match_percentage >= 60 else ('var(--muted)' if a.match_percentage >= 40 else 'var(--accent2)') }}">
+              {{ a.match_percentage|int }}%
+            </span>
+          </td>
+          <td>{{ a.matched_skills | fromjson | length }}</td>
+          <td>{{ a.missing_skills | fromjson | length }}</td>
+          <td style="color:var(--muted);">{{ a.created_at[:10] }}</td>
+          <td><a href="{{ url_for('view_analysis', analysis_id=a.id) }}" class="btn btn-secondary" style="padding:0.3rem 0.8rem; font-size:0.82rem;">View →</a></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="card" style="text-align:center; padding:4rem;">
+    <div style="font-size:3rem; margin-bottom:1rem;">📭</div>
+    <div style="font-family:'Syne',sans-serif; font-weight:700; font-size:1.2rem; margin-bottom:0.5rem;">No analyses yet</div>
+    <div style="color:var(--muted); margin-bottom:1.5rem;">Run your first analysis to see results here</div>
+    <a href="{{ url_for('dashboard') }}" class="btn btn-primary">Start Analyzing →</a>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

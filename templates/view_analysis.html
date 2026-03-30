@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block title %}SkillMap — Analysis Detail{% endblock %}
+{% block content %}
+<div class="container">
+  <div style="padding:2rem 0 1.5rem; display:flex; align-items:center; gap:1rem;">
+    <a href="{{ url_for('history') }}" class="btn btn-secondary">← Back</a>
+    <h1 style="font-family:'Syne',sans-serif; font-weight:800; font-size:1.6rem;">{{ analysis.role_title }}</h1>
+  </div>
+
+  {% set matched = analysis.matched_skills | fromjson %}
+  {% set missing = analysis.missing_skills | fromjson %}
+  {% set roadmap = analysis.roadmap | fromjson %}
+  {% set pct = analysis.match_percentage | int %}
+
+  <div class="card" style="margin-bottom:1.5rem;">
+    <div style="display:flex; align-items:center; gap:2rem; flex-wrap:wrap;">
+      <div style="text-align:center; padding:1.5rem 2rem; background:var(--surface2); border-radius:14px;">
+        <div style="font-family:'Syne',sans-serif; font-weight:800; font-size:2.5rem;
+          color:{{ 'var(--accent3)' if pct >= 60 else ('var(--muted)' if pct >= 40 else 'var(--accent2)') }}">
+          {{ pct }}%
+        </div>
+        <div style="color:var(--muted); font-size:0.82rem;">Match Rate</div>
+      </div>
+      <div>
+        <div style="font-size:0.85rem; color:var(--muted); margin-bottom:0.3rem;">Analyzed on</div>
+        <div style="font-weight:500;">{{ analysis.created_at[:16] }}</div>
+        <div style="margin-top:0.8rem; display:flex; gap:0.8rem;">
+          <div style="padding:0.5rem 1rem; background:rgba(67,233,123,0.12); border-radius:8px; font-size:0.9rem; color:var(--accent3);">
+            ✓ {{ matched|length }} matched
+          </div>
+          <div style="padding:0.5rem 1rem; background:rgba(255,101,132,0.12); border-radius:8px; font-size:0.9rem; color:var(--accent2);">
+            ✗ {{ missing|length }} missing
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem; margin-bottom:1.5rem;">
+    <div class="card">
+      <div class="card-title" style="color:var(--accent3);">✓ Matched Skills</div>
+      <div class="skill-pills">
+        {% for s in matched %}<span class="skill-pill badge-matched">{{ s }}</span>{% endfor %}
+        {% if not matched %}<span style="color:var(--muted); font-size:0.85rem;">None found</span>{% endif %}
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title" style="color:var(--accent2);">✗ Missing Skills</div>
+      <div class="skill-pills">
+        {% for s in missing %}<span class="skill-pill badge-missing">{{ s }}</span>{% endfor %}
+        {% if not missing %}<span style="color:var(--accent3); font-size:0.85rem;">🎉 All skills matched!</span>{% endif %}
+      </div>
+    </div>
+  </div>
+
+  {% if roadmap %}
+  <div class="card">
+    <div class="card-title" style="margin-bottom:1.5rem;">🗺️ Learning Roadmap</div>
+    {% for item in roadmap %}
+    <div class="roadmap-item">
+      <div class="roadmap-header">
+        <div class="roadmap-skill">{{ item.skill }}</div>
+        <span class="badge badge-{{ (item.priority or 'medium').lower() }}">{{ item.priority or 'Medium' }}</span>
+        <span class="roadmap-weeks">~{{ item.estimated_weeks or '?' }} weeks</span>
+      </div>
+      <div class="roadmap-resources">
+        {% for r in (item.resources or []) %}
+        <div class="resource-item">{{ r }}</div>
+        {% endfor %}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

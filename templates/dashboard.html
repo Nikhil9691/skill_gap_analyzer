@@ -1,0 +1,378 @@
+{% extends "base.html" %}
+{% block title %}SkillMap — Dashboard{% endblock %}
+
+{% block head %}
+<style>
+.page-hero { padding: 3rem 0 2rem; }
+.page-hero h1 { font-family:'Syne',sans-serif; font-weight:800; font-size:2.2rem; margin-bottom:0.4rem; }
+.page-hero p { color:var(--muted); font-size:1rem; }
+.page-hero span { color:var(--accent); }
+
+.analyzer-grid { display:grid; grid-template-columns:1fr 1fr; gap:1.5rem; margin-bottom:2rem; }
+.upload-zone {
+  border: 2px dashed var(--border);
+  border-radius: 16px;
+  padding: 2rem;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.2s;
+  background: var(--surface);
+  position: relative;
+  overflow: hidden;
+}
+.upload-zone::before {
+  content:''; position:absolute; inset:0;
+  background: radial-gradient(ellipse at center, rgba(108,99,255,0.05) 0%, transparent 70%);
+  opacity:0; transition:opacity 0.3s;
+}
+.upload-zone:hover, .upload-zone.drag-over { border-color:var(--accent); }
+.upload-zone:hover::before, .upload-zone.drag-over::before { opacity:1; }
+.upload-icon { font-size:2.5rem; margin-bottom:0.8rem; display:block; }
+.upload-title { font-family:'Syne',sans-serif; font-weight:700; font-size:1rem; margin-bottom:0.3rem; }
+.upload-sub { color:var(--muted); font-size:0.85rem; }
+.upload-or { color:var(--muted); font-size:0.8rem; margin: 1rem 0; }
+.file-preview { margin-top:1rem; padding:0.8rem; background:var(--surface2); border-radius:10px; display:none; text-align:left; font-size:0.85rem; }
+.file-preview.show { display:block; }
+
+.role-card {
+  display:flex; align-items:center; gap:0.8rem;
+  padding:0.8rem 1rem;
+  border:1px solid var(--border);
+  border-radius:12px;
+  cursor:pointer;
+  transition:all 0.2s;
+  background:var(--surface2);
+  margin-bottom:0.5rem;
+}
+.role-card:hover { border-color:var(--accent); background:rgba(108,99,255,0.08); }
+.role-card.selected { border-color:var(--accent); background:rgba(108,99,255,0.12); }
+.role-card input[type=radio] { display:none; }
+.role-icon { font-size:1.4rem; }
+.role-info { flex:1; }
+.role-name { font-weight:500; font-size:0.95rem; }
+.role-desc { color:var(--muted); font-size:0.8rem; }
+.role-check { width:20px; height:20px; border-radius:50%; border:2px solid var(--border); transition:all 0.2s; }
+.role-card.selected .role-check { background:var(--accent); border-color:var(--accent); display:flex; align-items:center; justify-content:center; }
+.role-card.selected .role-check::after { content:'✓'; color:#fff; font-size:0.7rem; }
+
+.analyze-btn-wrap { grid-column: 1/-1; text-align:center; }
+
+/* RESULT PANEL */
+#result-panel { display:none; }
+#result-panel.show { display:block; }
+
+.result-header {
+  display:grid; grid-template-columns: auto 1fr; gap:2rem; align-items:center;
+  margin-bottom:2rem;
+}
+.match-ring-wrap { text-align:center; }
+svg.ring { transform:rotate(-90deg); }
+.ring-text { font-family:'Syne',sans-serif; }
+
+.result-meta h2 { font-family:'Syne',sans-serif; font-weight:800; font-size:1.6rem; margin-bottom:0.3rem; }
+.result-meta p { color:var(--muted); }
+
+.skills-grid { display:grid; grid-template-columns:1fr 1fr; gap:1rem; margin:1.5rem 0; }
+
+.roadmap-item {
+  border:1px solid var(--border);
+  border-radius:12px;
+  padding:1.2rem;
+  background:var(--surface2);
+  margin-bottom:0.8rem;
+  transition:border-color 0.2s;
+  animation: fadeUp 0.4s ease forwards;
+}
+.roadmap-item:hover { border-color:var(--accent); }
+.roadmap-header { display:flex; align-items:center; gap:0.8rem; margin-bottom:0.8rem; }
+.roadmap-skill { font-family:'Syne',sans-serif; font-weight:700; font-size:1rem; flex:1; }
+.roadmap-weeks { color:var(--muted); font-size:0.82rem; }
+.roadmap-resources { display:flex; flex-direction:column; gap:0.3rem; }
+.resource-item { font-size:0.85rem; color:var(--muted); display:flex; align-items:center; gap:0.5rem; }
+.resource-item::before { content:'→'; color:var(--accent); }
+
+/* LOADING */
+#loading { display:none; flex-direction:column; align-items:center; gap:1rem; padding:3rem; }
+#loading.show { display:flex; }
+.loading-text { color:var(--muted); font-size:0.9rem; }
+
+/* Recent */
+.recent-list { display:flex; flex-direction:column; gap:0.5rem; }
+.recent-item {
+  display:flex; align-items:center; justify-content:space-between;
+  padding:0.8rem 1rem;
+  background:var(--surface2);
+  border-radius:10px;
+  text-decoration:none;
+  color:var(--text);
+  border:1px solid transparent;
+  transition:all 0.2s;
+  font-size:0.9rem;
+}
+.recent-item:hover { border-color:var(--accent); }
+.recent-pct { font-family:'Syne',sans-serif; font-weight:700; font-size:1rem; }
+
+@media(max-width:768px) { .analyzer-grid{grid-template-columns:1fr;} .skills-grid{grid-template-columns:1fr;} .result-header{grid-template-columns:1fr;text-align:center;} }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container">
+  <div class="page-hero fade-up">
+    <h1>Hello, <span>{{ session.name.split()[0] }}</span> 👋</h1>
+    <p>Paste your resume or upload a PDF, pick a role, and get your gap analysis instantly.</p>
+  </div>
+
+  <!-- ANALYZER FORM -->
+  <div id="analyzer-form">
+    <div class="analyzer-grid">
+      <!-- Left: Resume Input -->
+      <div>
+        <div class="card" style="margin-bottom:1rem;">
+          <div class="card-title">📄 Your Resume</div>
+          <div class="upload-zone" id="upload-zone">
+            <span class="upload-icon">☁️</span>
+            <div class="upload-title">Drop your PDF here</div>
+            <div class="upload-sub">or click to browse</div>
+            <input type="file" id="file-input" accept=".pdf,.txt,.doc,.docx" style="display:none">
+            <div class="upload-or">— or paste text below —</div>
+          </div>
+          <div class="file-preview" id="file-preview">
+            <strong id="file-name"></strong> — ready to analyze
+          </div>
+          <div class="form-group" style="margin-top:0.8rem; margin-bottom:0;">
+            <label class="form-label">Resume Text</label>
+            <textarea id="resume-text" class="form-control" rows="10" placeholder="Paste your resume content here — skills, experience, education, projects..."></textarea>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right: Job Role -->
+      <div>
+        <div class="card">
+          <div class="card-title">🎯 Target Role</div>
+          <div id="roles-list">
+            {% set icons = ['💻','📊','🤖','⚙️','🔧','📱','🎨','🔒'] %}
+            {% for role in roles %}
+            <label class="role-card" onclick="selectRole(this, {{ role.id }})">
+              <input type="radio" name="job_role" value="{{ role.id }}">
+              <span class="role-icon">{{ icons[loop.index0 % 8] }}</span>
+              <div class="role-info">
+                <div class="role-name">{{ role.title }}</div>
+                <div class="role-desc">{{ role.description or '' }}</div>
+              </div>
+              <div class="role-check"></div>
+            </label>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+
+      <div class="analyze-btn-wrap">
+        <button class="btn btn-primary btn-lg" onclick="runAnalysis()">
+          ⚡ Analyze My Skills
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- LOADING -->
+  <div id="loading">
+    <div class="spinner" style="width:40px;height:40px;border-width:4px;"></div>
+    <div class="loading-text">Claude is reading your resume…</div>
+  </div>
+
+  <!-- RESULT PANEL -->
+  <div id="result-panel">
+    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:1.5rem;">
+      <h2 style="font-family:'Syne',sans-serif; font-weight:800; font-size:1.5rem;">Your Analysis</h2>
+      <button class="btn btn-secondary" onclick="resetAnalysis()">← New Analysis</button>
+    </div>
+
+    <!-- Header: ring + summary -->
+    <div class="card" style="margin-bottom:1.5rem;">
+      <div class="result-header">
+        <div class="match-ring-wrap">
+          <svg class="ring" width="140" height="140" viewBox="0 0 140 140">
+            <circle cx="70" cy="70" r="58" fill="none" stroke="var(--border)" stroke-width="12"/>
+            <circle id="ring-progress" cx="70" cy="70" r="58" fill="none" stroke="var(--accent)"
+              stroke-width="12" stroke-linecap="round"
+              stroke-dasharray="364.4" stroke-dashoffset="364.4"
+              style="transition:stroke-dashoffset 1s ease;"/>
+          </svg>
+          <div style="margin-top:-110px; text-align:center; padding-bottom:70px;">
+            <div id="pct-text" style="font-family:'Syne',sans-serif; font-weight:800; font-size:2rem;"></div>
+            <div style="color:var(--muted); font-size:0.75rem;">match</div>
+          </div>
+        </div>
+        <div class="result-meta">
+          <h2 id="result-role-title"></h2>
+          <p id="result-summary" style="margin-top:0.5rem; line-height:1.7;"></p>
+          <div style="display:flex; gap:1rem; margin-top:1rem; flex-wrap:wrap;">
+            <div style="text-align:center; padding:0.8rem 1.5rem; background:var(--surface2); border-radius:12px;">
+              <div id="matched-count" style="font-family:'Syne',sans-serif; font-weight:800; font-size:1.5rem; color:var(--accent3);"></div>
+              <div style="color:var(--muted); font-size:0.78rem;">Matched</div>
+            </div>
+            <div style="text-align:center; padding:0.8rem 1.5rem; background:var(--surface2); border-radius:12px;">
+              <div id="missing-count" style="font-family:'Syne',sans-serif; font-weight:800; font-size:1.5rem; color:var(--accent2);"></div>
+              <div style="color:var(--muted); font-size:0.78rem;">Missing</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Skills -->
+    <div class="skills-grid">
+      <div class="card">
+        <div class="card-title" style="color:var(--accent3);">✓ Skills You Have</div>
+        <div id="matched-skills" class="skill-pills"></div>
+      </div>
+      <div class="card">
+        <div class="card-title" style="color:var(--accent2);">✗ Skills to Learn</div>
+        <div id="missing-skills" class="skill-pills"></div>
+      </div>
+    </div>
+
+    <!-- Roadmap -->
+    <div class="card" style="margin-top:1.5rem;">
+      <div class="card-title" style="margin-bottom:1.5rem;">🗺️ Your Learning Roadmap</div>
+      <div id="roadmap-items"></div>
+    </div>
+  </div>
+
+  <!-- Recent Analyses -->
+  {% if analyses %}
+  <div class="card" style="margin-top:2rem;">
+    <div class="card-title">📈 Recent Analyses</div>
+    <div class="recent-list">
+      {% for a in analyses %}
+      <a href="{{ url_for('view_analysis', analysis_id=a.id) }}" class="recent-item">
+        <div>
+          <div style="font-weight:500;">{{ a.role_title }}</div>
+          <div style="color:var(--muted); font-size:0.8rem;">{{ a.created_at[:16] }}</div>
+        </div>
+        <div class="recent-pct" style="color:{{ 'var(--accent3)' if a.match_percentage >= 60 else 'var(--accent2)' }}">
+          {{ a.match_percentage|int }}%
+        </div>
+      </a>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+</div>
+
+<script>
+let selectedRoleId = null;
+
+function selectRole(label, roleId) {
+  document.querySelectorAll('.role-card').forEach(c => c.classList.remove('selected'));
+  label.classList.add('selected');
+  selectedRoleId = roleId;
+}
+
+// File upload
+const uploadZone = document.getElementById('upload-zone');
+const fileInput = document.getElementById('file-input');
+
+uploadZone.addEventListener('click', () => fileInput.click());
+uploadZone.addEventListener('dragover', e => { e.preventDefault(); uploadZone.classList.add('drag-over'); });
+uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('drag-over'));
+uploadZone.addEventListener('drop', e => {
+  e.preventDefault(); uploadZone.classList.remove('drag-over');
+  const file = e.dataTransfer.files[0];
+  if (file) handleFile(file);
+});
+fileInput.addEventListener('change', e => { if(e.target.files[0]) handleFile(e.target.files[0]); });
+
+function handleFile(file) {
+  document.getElementById('file-name').textContent = file.name;
+  document.getElementById('file-preview').classList.add('show');
+  const reader = new FileReader();
+  reader.onload = e => { document.getElementById('resume-text').value = e.target.result; };
+  reader.readAsText(file);
+}
+
+async function runAnalysis() {
+  const resumeText = document.getElementById('resume-text').value.trim();
+  if (!resumeText) { alert('Please paste your resume text or upload a file.'); return; }
+  if (!selectedRoleId) { alert('Please select a target job role.'); return; }
+
+  document.getElementById('analyzer-form').style.display = 'none';
+  document.getElementById('loading').classList.add('show');
+
+  try {
+    const res = await fetch('/api/analyze', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ resume_text: resumeText, job_role_id: selectedRoleId })
+    });
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+    showResult(data);
+  } catch(err) {
+    alert('Analysis failed: ' + err.message);
+    document.getElementById('analyzer-form').style.display = 'block';
+  } finally {
+    document.getElementById('loading').classList.remove('show');
+  }
+}
+
+function showResult(data) {
+  // Ring
+  const pct = data.match_percentage;
+  const circumference = 364.4;
+  const offset = circumference - (pct / 100) * circumference;
+  const ring = document.getElementById('ring-progress');
+  const ringColor = pct >= 70 ? '#43e97b' : pct >= 40 ? '#ffa500' : '#ff6584';
+  ring.style.stroke = ringColor;
+  setTimeout(() => { ring.style.strokeDashoffset = offset; }, 100);
+  document.getElementById('pct-text').textContent = Math.round(pct) + '%';
+
+  document.getElementById('result-role-title').textContent = data.role_title;
+  document.getElementById('result-summary').textContent = data.skill_summary || '';
+  document.getElementById('matched-count').textContent = data.matched_skills.length;
+  document.getElementById('missing-count').textContent = data.missing_skills.length;
+
+  // Matched skills
+  const matchedEl = document.getElementById('matched-skills');
+  matchedEl.innerHTML = data.matched_skills.length
+    ? data.matched_skills.map(s => `<span class="skill-pill badge-matched">${s}</span>`).join('')
+    : '<span style="color:var(--muted); font-size:0.85rem;">No matched skills found</span>';
+
+  // Missing skills
+  const missingEl = document.getElementById('missing-skills');
+  missingEl.innerHTML = data.missing_skills.length
+    ? data.missing_skills.map(s => `<span class="skill-pill badge-missing">${s}</span>`).join('')
+    : '<span style="color:var(--accent3); font-size:0.85rem;">🎉 All required skills found!</span>';
+
+  // Roadmap
+  const roadmapEl = document.getElementById('roadmap-items');
+  if (data.roadmap && data.roadmap.length) {
+    roadmapEl.innerHTML = data.roadmap.map((item, i) => `
+      <div class="roadmap-item" style="animation-delay:${i*0.08}s">
+        <div class="roadmap-header">
+          <div class="roadmap-skill">${item.skill}</div>
+          <span class="badge badge-${(item.priority||'medium').toLowerCase()}">${item.priority || 'Medium'}</span>
+          <span class="roadmap-weeks">~${item.estimated_weeks || '?'} weeks</span>
+        </div>
+        <div class="roadmap-resources">
+          ${(item.resources||[]).map(r => `<div class="resource-item">${r}</div>`).join('')}
+        </div>
+      </div>
+    `).join('');
+  } else {
+    roadmapEl.innerHTML = '<p style="color:var(--accent3)">🎉 Your resume already matches all required skills!</p>';
+  }
+
+  document.getElementById('result-panel').classList.add('show');
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function resetAnalysis() {
+  document.getElementById('result-panel').classList.remove('show');
+  document.getElementById('analyzer-form').style.display = 'block';
+  document.getElementById('ring-progress').style.strokeDashoffset = '364.4';
+}
+</script>
+{% endblock %}

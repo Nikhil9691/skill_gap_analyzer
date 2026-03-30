@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+{% block title %}SkillMap — Admin{% endblock %}
+{% block content %}
+<div class="container">
+  <div style="padding:3rem 0 2rem;">
+    <h1 style="font-family:'Syne',sans-serif; font-weight:800; font-size:2rem; margin-bottom:0.3rem;">Admin Panel</h1>
+    <p style="color:var(--muted);">Manage job roles and system data</p>
+  </div>
+
+  <div style="display:grid; grid-template-columns:1fr 1fr; gap:1.5rem;">
+    <!-- Add Role -->
+    <div class="card">
+      <div class="card-title">➕ Add Job Role</div>
+      <div id="add-error" class="alert alert-error" style="display:none;"></div>
+      <div class="form-group">
+        <label class="form-label">Role Title</label>
+        <input id="role-title" class="form-control" placeholder="e.g. Cloud Engineer">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Description</label>
+        <input id="role-desc" class="form-control" placeholder="Brief description">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Required Skills (comma-separated)</label>
+        <textarea id="role-skills" class="form-control" rows="4" placeholder="Python, AWS, Docker, Kubernetes, Terraform"></textarea>
+      </div>
+      <button class="btn btn-primary" onclick="addRole()">Add Role</button>
+    </div>
+
+    <!-- Users -->
+    <div class="card">
+      <div class="card-title">👥 Registered Users ({{ users|length }})</div>
+      <table>
+        <thead><tr><th>Name</th><th>Email</th><th>Role</th></tr></thead>
+        <tbody>
+          {% for u in users %}
+          <tr>
+            <td>{{ u.name }}</td>
+            <td style="color:var(--muted); font-size:0.85rem;">{{ u.email }}</td>
+            <td><span class="badge {{ 'badge-matched' if u.role=='admin' else '' }}">{{ u.role }}</span></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Job Roles Table -->
+  <div class="card" style="margin-top:1.5rem;">
+    <div class="card-title">💼 Job Roles ({{ roles|length }})</div>
+    <table>
+      <thead><tr><th>Title</th><th>Skills</th><th>Actions</th></tr></thead>
+      <tbody id="roles-table">
+        {% for r in roles %}
+        <tr id="role-row-{{ r.id }}">
+          <td style="font-weight:500;">{{ r.title }}</td>
+          <td style="color:var(--muted); font-size:0.82rem;">{{ r.skills | fromjson | join(', ') }}</td>
+          <td>
+            <button class="btn btn-danger" style="padding:0.3rem 0.7rem; font-size:0.8rem;" onclick="deleteRole({{ r.id }})">Delete</button>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+async function addRole() {
+  const title = document.getElementById('role-title').value.trim();
+  const desc = document.getElementById('role-desc').value.trim();
+  const skills = document.getElementById('role-skills').value.trim();
+  const errEl = document.getElementById('add-error');
+
+  if (!title || !skills) { errEl.textContent='Title and skills are required'; errEl.style.display='block'; return; }
+  errEl.style.display='none';
+
+  const res = await fetch('/api/admin/roles', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({title,description:desc,skills}) });
+  if ((await res.json()).success) location.reload();
+}
+
+async function deleteRole(id) {
+  if (!confirm('Delete this role?')) return;
+  const res = await fetch('/api/admin/roles/'+id, { method:'DELETE' });
+  if ((await res.json()).success) document.getElementById('role-row-'+id)?.remove();
+}
+</script>
+{% endblock %}
