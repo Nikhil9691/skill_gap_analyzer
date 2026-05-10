@@ -143,7 +143,9 @@ def init_db():
     CREATE TABLE IF NOT EXISTS analyses (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         user_id INTEGER NOT NULL,
-        job_role_id INTEGER NOT NULL,
+        job_role_id INTEGER,
+        custom_role_title TEXT,
+        job_url TEXT,
         resume_text TEXT,
         matched_skills TEXT,
         missing_skills TEXT,
@@ -365,12 +367,10 @@ def analyze():
         pct = result.get("match_percentage", 0)
         roadmap = result.get("roadmap", [])
         summary = result.get("skill_summary", generate_summary(pct, matched, missing, role["title"]))
-        # Enrich roadmap resources from local DB if missing
         for item in roadmap:
             if not item.get("resources"):
                 item["resources"] = RESOURCES.get(item["skill"], DEFAULT_RESOURCES)
     else:
-        # Fallback
         extracted = extract_skills(resume_text, required)
         matched = [s for s in required if s in extracted]
         missing = [s for s in required if s not in extracted]
@@ -390,13 +390,159 @@ def analyze():
                     "roadmap": roadmap, "role_title": role["title"],
                     "required_skills": required})
 
+
+def fetch_job_posting(url):
+    """Fetch and extract text from a job posting URL."""
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    }
+    try:
+        resp = requests.get(url, headers=headers, timeout=15)
+        resp.raise_for_status()
+        # Strip HTML tags with a simple regex
+        text = re.sub(r'<script[^>]*>.*?</script>', '', resp.text, flags=re.DOTALL)
+        text = re.sub(r'<style[^>]*>.*?</style>', '', text, flags=re.DOTALL)
+        text = re.sub(r'<[^>]+>', ' ', text)
+        text = re.sub(r'\s+', ' ', text).strip()
+        # Return first 8000 chars — enough for any job posting
+        return text[:8000]
+    except Exception as e:
+        return None
+
+
+def extract_skills_from_job(job_text):
+    """Use Groq to extract required skills and role title from raw job posting text."""
+    if not GROQ_API_KEY:
+        # Fallback: match against known skill aliases
+        found = set()
+        text_lower = job_text.lower()
+        for alias, canonical in SKILL_ALIASES.items():
+            if re.search(r'\b' + re.escape(alias) + r'\b', text_lower):
+                found.add(canonical)
+        return {"title": "Custom Job Posting", "skills": list(found)[:20]}
+
+    prompt = f"""Extract the job title and required skills from this job posting text.
+
+JOB POSTING:
+{job_text}
+
+Respond ONLY with valid JSON (no markdown, no explanation):
+{{
+  "title": "exact job title from posting",
+  "skills": ["Skill1", "Skill2", "Skill3"]
+}}
+
+Rules:
+- skills should be specific technical skills, tools, languages, frameworks
+- include soft skills only if strongly emphasized
+- return 8-20 skills maximum
+- use proper casing (e.g. "Python", "React", "AWS")"""
+
+    try:
+        res = requests.post(
+            GROQ_API_URL,
+            headers={"Authorization": f"Bearer {GROQ_API_KEY}", "Content-Type": "application/json"},
+            json={
+                "model": "llama-3.3-70b-versatile",
+                "messages": [{"role": "user", "content": prompt}],
+                "temperature": 0.1,
+                "max_tokens": 500,
+            },
+            timeout=20
+        )
+        content = res.json()["choices"][0]["message"]["content"].strip()
+        if "```" in content:
+            content = content.split("```")[1]
+            if content.startswith("json"):
+                content = content[4:]
+        return json.loads(content.strip())
+    except:
+        return None
+
+
+@app.route("/api/fetch-job", methods=["POST"])
+@login_required
+def fetch_job():
+    """Fetch a job posting URL and return extracted skills for preview."""
+    data = request.get_json()
+    url = data.get("url", "").strip()
+    job_text = data.get("job_text", "").strip()  # manual paste fallback
+
+    if not url and not job_text:
+        return jsonify({"error": "URL or job description text required"}), 400
+
+    if url:
+        raw_text = fetch_job_posting(url)
+        if not raw_text:
+            return jsonify({"error": "blocked"}), 422
+
+        job_info = extract_skills_from_job(raw_text)
+    else:
+        job_info = extract_skills_from_job(job_text)
+
+    if not job_info or not job_info.get("skills"):
+        return jsonify({"error": "Could not extract skills from this posting"}), 422
+
+    return jsonify({
+        "title": job_info.get("title", "Custom Job Posting"),
+        "skills": job_info.get("skills", [])
+    })
+
+
+@app.route("/api/analyze-custom", methods=["POST"])
+@login_required
+def analyze_custom():
+    """Analyze resume against a custom job posting (URL or pasted text)."""
+    data = request.get_json()
+    resume_text = data.get("resume_text", "").strip()
+    role_title = data.get("role_title", "Custom Job Posting")
+    required = data.get("required_skills", [])
+    job_url = data.get("job_url", "")
+
+    if not resume_text:
+        return jsonify({"error": "Resume text required"}), 400
+    if not required:
+        return jsonify({"error": "No skills found to compare against"}), 400
+
+    result = analyze_with_groq(resume_text, role_title, required)
+    if result:
+        matched = result.get("matched_skills", [])
+        missing = result.get("missing_skills", [])
+        pct = result.get("match_percentage", 0)
+        roadmap = result.get("roadmap", [])
+        summary = result.get("skill_summary", generate_summary(pct, matched, missing, role_title))
+        for item in roadmap:
+            if not item.get("resources"):
+                item["resources"] = RESOURCES.get(item["skill"], DEFAULT_RESOURCES)
+    else:
+        extracted = extract_skills(resume_text, required)
+        matched = [s for s in required if s in extracted]
+        missing = [s for s in required if s not in extracted]
+        pct = round((len(matched) / len(required)) * 100) if required else 0
+        roadmap = build_roadmap(missing)
+        summary = generate_summary(pct, matched, missing, role_title)
+
+    db = get_db()
+    db.execute(
+        """INSERT INTO analyses (user_id, custom_role_title, job_url, resume_text,
+           matched_skills, missing_skills, match_percentage, roadmap)
+           VALUES (?,?,?,?,?,?,?,?)""",
+        (session["user_id"], role_title, job_url, resume_text,
+         json.dumps(matched), json.dumps(missing), pct, json.dumps(roadmap)))
+    db.commit(); db.close()
+
+    return jsonify({"matched_skills": matched, "missing_skills": missing,
+                    "match_percentage": pct, "skill_summary": summary,
+                    "roadmap": roadmap, "role_title": role_title,
+                    "required_skills": required})
+
 @app.route("/history")
 @login_required
 def history():
     db = get_db()
     analyses = db.execute(
-        """SELECT a.*, j.title as role_title FROM analyses a
-           JOIN job_roles j ON a.job_role_id=j.id
+        """SELECT a.*, COALESCE(j.title, a.custom_role_title, 'Custom Job') as role_title
+           FROM analyses a LEFT JOIN job_roles j ON a.job_role_id=j.id
            WHERE a.user_id=? ORDER BY a.created_at DESC""",
         (session["user_id"],)).fetchall()
     db.close()
@@ -407,8 +553,9 @@ def history():
 def view_analysis(analysis_id):
     db = get_db()
     analysis = db.execute(
-        """SELECT a.*, j.title as role_title, j.skills as role_skills FROM analyses a
-           JOIN job_roles j ON a.job_role_id=j.id
+        """SELECT a.*, COALESCE(j.title, a.custom_role_title, 'Custom Job') as role_title,
+           j.skills as role_skills FROM analyses a
+           LEFT JOIN job_roles j ON a.job_role_id=j.id
            WHERE a.id=? AND a.user_id=?""",
         (analysis_id, session["user_id"])).fetchone()
     db.close()
