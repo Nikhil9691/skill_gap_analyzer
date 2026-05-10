@@ -98,7 +98,20 @@ svg.ring { transform:rotate(-90deg); }
 #loading.show { display:flex; }
 .loading-text { color:var(--muted); font-size:0.9rem; }
 
-/* Recent */
+/* TABS */
+.tab-bar { display:flex; gap:0.4rem; margin-bottom:1rem; background:var(--surface2); padding:0.4rem; border-radius:12px; }
+.tab-btn { flex:1; padding:0.55rem 1rem; border:none; border-radius:8px; font-family:'DM Sans',sans-serif; font-weight:500; font-size:0.9rem; cursor:pointer; background:transparent; color:var(--muted); transition:all 0.2s; }
+.tab-btn.active { background:var(--accent); color:#fff; }
+.tab-panel { display:none; }
+.tab-panel.active { display:block; }
+
+/* JOB URL */
+.job-preview { margin-top:1rem; padding:1rem; background:var(--surface2); border-radius:12px; border:1px solid var(--border); display:none; }
+.job-preview.show { display:block; }
+.job-preview-title { font-family:'Syne',sans-serif; font-weight:700; font-size:1rem; margin-bottom:0.6rem; }
+.fetch-status { font-size:0.85rem; color:var(--muted); margin-top:0.5rem; min-height:1.2rem; }
+.fetch-status.error { color:var(--danger); }
+.fetch-status.success { color:var(--accent3); }
 .recent-list { display:flex; flex-direction:column; gap:0.5rem; }
 .recent-item {
   display:flex; align-items:center; justify-content:space-between;
@@ -153,20 +166,62 @@ svg.ring { transform:rotate(-90deg); }
       <div>
         <div class="card">
           <div class="card-title">🎯 Target Role</div>
-          <div id="roles-list">
-            {% set icons = ['💻','📊','🤖','⚙️','🔧','📱','🎨','🔒'] %}
-            {% for role in roles %}
-            <label class="role-card" onclick="selectRole(this, {{ role.id }})">
-              <input type="radio" name="job_role" value="{{ role.id }}">
-              <span class="role-icon">{{ icons[loop.index0 % 8] }}</span>
-              <div class="role-info">
-                <div class="role-name">{{ role.title }}</div>
-                <div class="role-desc">{{ role.description or '' }}</div>
-              </div>
-              <div class="role-check"></div>
-            </label>
-            {% endfor %}
+
+          <!-- Tab bar -->
+          <div class="tab-bar">
+            <button class="tab-btn active" onclick="switchTab('preset', this)">📋 Preset Roles</button>
+            <button class="tab-btn" onclick="switchTab('url', this)">🔗 Job Posting</button>
           </div>
+
+          <!-- Tab: Preset roles -->
+          <div id="tab-preset" class="tab-panel active">
+            <div id="roles-list">
+              {% set icons = ['💻','📊','🤖','⚙️','🔧','📱','🎨','🔒'] %}
+              {% for role in roles %}
+              <label class="role-card" onclick="selectRole(this, {{ role.id }})">
+                <input type="radio" name="job_role" value="{{ role.id }}">
+                <span class="role-icon">{{ icons[loop.index0 % 8] }}</span>
+                <div class="role-info">
+                  <div class="role-name">{{ role.title }}</div>
+                  <div class="role-desc">{{ role.description or '' }}</div>
+                </div>
+                <div class="role-check"></div>
+              </label>
+              {% endfor %}
+            </div>
+          </div>
+
+          <!-- Tab: Job posting URL -->
+          <div id="tab-url" class="tab-panel">
+            <div class="form-group">
+              <label class="form-label">Job Posting URL</label>
+              <div style="display:flex; gap:0.5rem;">
+                <input id="job-url-input" class="form-control" placeholder="https://jobs.company.com/..." style="flex:1;">
+                <button class="btn btn-primary" onclick="fetchJobUrl()" id="fetch-btn" style="white-space:nowrap;">Fetch</button>
+              </div>
+              <div id="fetch-status" class="fetch-status"></div>
+            </div>
+
+            <div style="display:flex; align-items:center; gap:0.8rem; margin:1rem 0; color:var(--muted); font-size:0.82rem;">
+              <div style="flex:1; height:1px; background:var(--border);"></div>
+              or paste job description
+              <div style="flex:1; height:1px; background:var(--border);"></div>
+            </div>
+
+            <div class="form-group" style="margin-bottom:0.5rem;">
+              <label class="form-label">Job Description Text</label>
+              <textarea id="job-desc-text" class="form-control" rows="6" placeholder="Paste the full job description here…"></textarea>
+            </div>
+            <button class="btn btn-secondary" style="width:100%; justify-content:center;" onclick="extractFromText()">Extract Skills from Text</button>
+
+            <!-- Preview of extracted skills -->
+            <div id="job-preview" class="job-preview">
+              <div class="job-preview-title" id="job-preview-title"></div>
+              <div style="font-size:0.8rem; color:var(--muted); margin-bottom:0.5rem;">Required skills found:</div>
+              <div id="job-preview-skills" class="skill-pills"></div>
+            </div>
+          </div>
+
         </div>
       </div>
 
@@ -266,6 +321,20 @@ svg.ring { transform:rotate(-90deg); }
 
 <script>
 let selectedRoleId = null;
+let customJobSkills = null;
+let customJobTitle = null;
+let customJobUrl = '';
+let activeTab = 'preset';
+
+function switchTab(tab, btn) {
+  activeTab = tab;
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('tab-' + tab).classList.add('active');
+  // Reset custom job if switching back to preset
+  if (tab === 'preset') { customJobSkills = null; customJobTitle = null; customJobUrl = ''; }
+}
 
 function selectRole(label, roleId) {
   document.querySelectorAll('.role-card').forEach(c => c.classList.remove('selected'));
@@ -273,7 +342,82 @@ function selectRole(label, roleId) {
   selectedRoleId = roleId;
 }
 
-// File upload
+// ── Job URL fetch ─────────────────────────────────────────────────────────────
+
+async function fetchJobUrl() {
+  const url = document.getElementById('job-url-input').value.trim();
+  if (!url) return;
+  const btn = document.getElementById('fetch-btn');
+  const status = document.getElementById('fetch-status');
+  btn.disabled = true; btn.textContent = 'Fetching…';
+  status.className = 'fetch-status';
+  status.textContent = 'Fetching job posting…';
+
+  try {
+    const res = await fetch('/api/fetch-job', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ url })
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      if (data.error === 'blocked') {
+        status.className = 'fetch-status error';
+        status.textContent = '⚠ This site blocks automated access. Please copy-paste the job description below instead.';
+      } else {
+        status.className = 'fetch-status error';
+        status.textContent = '⚠ ' + (data.error || 'Failed to fetch');
+      }
+      return;
+    }
+    customJobUrl = url;
+    showJobPreview(data.title, data.skills);
+    status.className = 'fetch-status success';
+    status.textContent = '✓ Skills extracted successfully';
+  } catch(e) {
+    status.className = 'fetch-status error';
+    status.textContent = '⚠ Network error. Try pasting the job description below.';
+  } finally {
+    btn.disabled = false; btn.textContent = 'Fetch';
+  }
+}
+
+async function extractFromText() {
+  const text = document.getElementById('job-desc-text').value.trim();
+  if (!text) { alert('Please paste the job description text first.'); return; }
+  const status = document.getElementById('fetch-status');
+  status.className = 'fetch-status';
+  status.textContent = 'Extracting skills…';
+
+  try {
+    const res = await fetch('/api/fetch-job', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ job_text: text })
+    });
+    const data = await res.json();
+    if (!res.ok) { status.className='fetch-status error'; status.textContent='⚠ ' + (data.error||'Failed'); return; }
+    customJobUrl = '';
+    showJobPreview(data.title, data.skills);
+    status.className = 'fetch-status success';
+    status.textContent = '✓ Skills extracted successfully';
+  } catch(e) {
+    status.className = 'fetch-status error';
+    status.textContent = '⚠ Network error';
+  }
+}
+
+function showJobPreview(title, skills) {
+  customJobTitle = title;
+  customJobSkills = skills;
+  document.getElementById('job-preview-title').textContent = title;
+  document.getElementById('job-preview-skills').innerHTML =
+    skills.map(s => `<span class="skill-pill badge-missing">${s}</span>`).join('');
+  document.getElementById('job-preview').classList.add('show');
+}
+
+// ── File upload ───────────────────────────────────────────────────────────────
+
 const uploadZone = document.getElementById('upload-zone');
 const fileInput = document.getElementById('file-input');
 
@@ -302,14 +446,12 @@ async function handleFile(file) {
       for (let i = 1; i <= pdf.numPages; i++) {
         const page = await pdf.getPage(i);
         const content = await page.getTextContent();
-        const pageText = content.items.map(item => item.str).join(' ');
-        fullText += pageText + '\n';
+        fullText += content.items.map(item => item.str).join(' ') + '\n';
       }
       textarea.value = fullText.trim();
       preview.innerHTML = '<strong>' + file.name + '</strong> — ✓ ' + pdf.numPages + ' page(s) extracted successfully';
     } catch (err) {
       preview.innerHTML = '<strong>' + file.name + '</strong> — ⚠ PDF extraction failed. Please paste your resume text manually.';
-      console.error('PDF error:', err);
     }
   } else {
     const reader = new FileReader();
@@ -321,19 +463,35 @@ async function handleFile(file) {
   }
 }
 
+// ── Analyze ───────────────────────────────────────────────────────────────────
+
 async function runAnalysis() {
   const resumeText = document.getElementById('resume-text').value.trim();
   if (!resumeText) { alert('Please paste your resume text or upload a file.'); return; }
-  if (!selectedRoleId) { alert('Please select a target job role.'); return; }
+
+  let endpoint, body;
+
+  if (activeTab === 'preset') {
+    if (!selectedRoleId) { alert('Please select a target job role.'); return; }
+    endpoint = '/api/analyze';
+    body = { resume_text: resumeText, job_role_id: selectedRoleId };
+  } else {
+    if (!customJobSkills || !customJobSkills.length) {
+      alert('Please fetch a job posting URL or extract skills from the job description first.');
+      return;
+    }
+    endpoint = '/api/analyze-custom';
+    body = { resume_text: resumeText, role_title: customJobTitle, required_skills: customJobSkills, job_url: customJobUrl };
+  }
 
   document.getElementById('analyzer-form').style.display = 'none';
   document.getElementById('loading').classList.add('show');
 
   try {
-    const res = await fetch('/api/analyze', {
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ resume_text: resumeText, job_role_id: selectedRoleId })
+    const res = await fetch(endpoint, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(body)
     });
     const data = await res.json();
     if (data.error) throw new Error(data.error);
@@ -347,7 +505,6 @@ async function runAnalysis() {
 }
 
 function showResult(data) {
-  // Ring
   const pct = data.match_percentage;
   const circumference = 364.4;
   const offset = circumference - (pct / 100) * circumference;
@@ -362,19 +519,16 @@ function showResult(data) {
   document.getElementById('matched-count').textContent = data.matched_skills.length;
   document.getElementById('missing-count').textContent = data.missing_skills.length;
 
-  // Matched skills
   const matchedEl = document.getElementById('matched-skills');
   matchedEl.innerHTML = data.matched_skills.length
     ? data.matched_skills.map(s => `<span class="skill-pill badge-matched">${s}</span>`).join('')
     : '<span style="color:var(--muted); font-size:0.85rem;">No matched skills found</span>';
 
-  // Missing skills
   const missingEl = document.getElementById('missing-skills');
   missingEl.innerHTML = data.missing_skills.length
     ? data.missing_skills.map(s => `<span class="skill-pill badge-missing">${s}</span>`).join('')
     : '<span style="color:var(--accent3); font-size:0.85rem;">🎉 All required skills found!</span>';
 
-  // Roadmap
   const roadmapEl = document.getElementById('roadmap-items');
   if (data.roadmap && data.roadmap.length) {
     roadmapEl.innerHTML = data.roadmap.map((item, i) => `
