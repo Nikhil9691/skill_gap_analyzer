@@ -2,6 +2,8 @@
 {% block title %}SkillMap — Dashboard{% endblock %}
 
 {% block head %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script>pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';</script>
 <style>
 .page-hero { padding: 3rem 0 2rem; }
 .page-hero h1 { font-family:'Syne',sans-serif; font-weight:800; font-size:2.2rem; margin-bottom:0.4rem; }
@@ -285,12 +287,38 @@ uploadZone.addEventListener('drop', e => {
 });
 fileInput.addEventListener('change', e => { if(e.target.files[0]) handleFile(e.target.files[0]); });
 
-function handleFile(file) {
+async function handleFile(file) {
   document.getElementById('file-name').textContent = file.name;
-  document.getElementById('file-preview').classList.add('show');
-  const reader = new FileReader();
-  reader.onload = e => { document.getElementById('resume-text').value = e.target.result; };
-  reader.readAsText(file);
+  const preview = document.getElementById('file-preview');
+  const textarea = document.getElementById('resume-text');
+  preview.classList.add('show');
+  preview.innerHTML = '<strong>' + file.name + '</strong> — extracting text…';
+
+  if (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')) {
+    try {
+      const arrayBuffer = await file.arrayBuffer();
+      const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+      let fullText = '';
+      for (let i = 1; i <= pdf.numPages; i++) {
+        const page = await pdf.getPage(i);
+        const content = await page.getTextContent();
+        const pageText = content.items.map(item => item.str).join(' ');
+        fullText += pageText + '\n';
+      }
+      textarea.value = fullText.trim();
+      preview.innerHTML = '<strong>' + file.name + '</strong> — ✓ ' + pdf.numPages + ' page(s) extracted successfully';
+    } catch (err) {
+      preview.innerHTML = '<strong>' + file.name + '</strong> — ⚠ PDF extraction failed. Please paste your resume text manually.';
+      console.error('PDF error:', err);
+    }
+  } else {
+    const reader = new FileReader();
+    reader.onload = e => {
+      textarea.value = e.target.result;
+      preview.innerHTML = '<strong>' + file.name + '</strong> — ✓ ready to analyze';
+    };
+    reader.readAsText(file);
+  }
 }
 
 async function runAnalysis() {
